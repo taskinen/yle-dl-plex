@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Permissions:
+#   contents: write       — py-cov-action stores the badge/data on a side branch
+#                            (python-coverage-comment-action-data) on push to main.
+#   pull-requests: write  — EnricoMi + py-cov-action both post PR comments.
+#   checks: write         — EnricoMi creates a check run with per-test detail.
+#   issues: write         — EnricoMi fallback channel when PR comments aren't allowed
+#                            (e.g. forks).
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python 3.14
+        run: uv python install 3.14
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Lint (ruff check)
+        id: ruff_check
+        run: |
+          set -o pipefail
+          uv run ruff check --output-format=concise . 2>&1 | tee ruff-check.log
+
+      - name: Format check (ruff format)
+        id: ruff_format
+        if: always()
+        run: |
+          set -o pipefail
+          uv run ruff format --check . 2>&1 | tee ruff-format.log
+
+      - name: Type check (mypy)
+        id: mypy
+        if: always()
+        run: |
+          set -o pipefail
+          uv run mypy 2>&1 | tee mypy.log
+
+      - name: Run tests
+        id: pytest
+        if: always()
+        run: |
+          uv run pytest \
+            --junitxml=junit.xml \
+            --cov \
+            --cov-report=term-missing \
+            --cov-report=xml
+
+      - name: Publish test results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: junit.xml
+          check_name: pytest
+          comment_mode: always
+          report_individual_runs: true
+
+      - name: Coverage report
+        if: always()
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINIMUM_GREEN: 85
+          MINIMUM_ORANGE: 70
+          ANNOTATE_MISSING_LINES: true
+
+      - name: Static-check summary
+        if: always()
+        env:
+          RUFF_CHECK_OUTCOME: ${{ steps.ruff_check.outcome }}
+          RUFF_FORMAT_OUTCOME: ${{ steps.ruff_format.outcome }}
+          MYPY_OUTCOME: ${{ steps.mypy.outcome }}
+        run: |
+          status() {
+            case "$1" in
+              success)   echo "**pass**" ;;
+              failure)   echo "**FAIL**" ;;
+              cancelled) echo "_cancelled_" ;;
+              skipped)   echo "_skipped_" ;;
+              *)         echo "_$1_" ;;
+            esac
+          }
+          {
+            echo "## Static checks"
+            echo
+            echo "| Check | Result |"
+            echo "|-------|:------:|"
+            echo "| Lint (ruff check)    | $(status "$RUFF_CHECK_OUTCOME")  |"
+            echo "| Format (ruff format) | $(status "$RUFF_FORMAT_OUTCOME") |"
+            echo "| Type check (mypy)    | $(status "$MYPY_OUTCOME")        |"
+            echo
+            for tool in ruff-check ruff-format mypy; do
+              log="${tool}.log"
+              [ -s "$log" ] || continue
+              echo "<details><summary>${tool} output</summary>"
+              echo
+              echo '```'
+              cat "$log"
+              echo '```'
+              echo
+              echo "</details>"
+              echo
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore

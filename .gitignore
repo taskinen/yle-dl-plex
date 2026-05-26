@@ -21,6 +21,8 @@ env/
 .pytest_cache/
 .coverage
 .coverage.*
+coverage.xml
+junit.xml
 htmlcov/
 .tox/
 .mypy_cache/

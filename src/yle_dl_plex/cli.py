@@ -11,6 +11,7 @@ Stages:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import os
 import re
@@ -123,10 +124,8 @@ def fetch_to_file(client: httpx.Client, url: str, dest: Path) -> bool:
             handle.write(response.content)
         os.replace(tmp_name, dest)
     except BaseException:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(tmp_name)
-        except FileNotFoundError:
-            pass
         raise
     return True
 
@@ -149,7 +148,7 @@ def _series_dir(episode_abs_path: Path, destdir: Path) -> Path:
     # so `.parent.parent` would overshoot to destdir itself.
     try:
         first_component = episode_abs_path.relative_to(destdir).parts[0]
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return episode_abs_path.parent.parent
     return destdir / first_component
 
@@ -174,7 +173,7 @@ def _clean_episode_title(raw_title: str, series_title: str) -> str:
     title = raw_title.rsplit("/", 1)[-1]
     series_prefix = f"{series_title} - "
     if title.startswith(series_prefix):
-        title = title[len(series_prefix):]
+        title = title[len(series_prefix) :]
     for pattern in (_LEADING_SXXEXX, _LEADING_DATE):
         match = pattern.match(title)
         if match:
@@ -224,9 +223,7 @@ def _show_uses_seasons(
     return _page_indicates_seasons(soup)
 
 
-def _corrected_episode_path(
-    ep: Episode, series_dir: Path, destdir: Path, seasoned: bool
-) -> Path:
+def _corrected_episode_path(ep: Episode, series_dir: Path, destdir: Path, seasoned: bool) -> Path:
     # Upstream yle-dl drops the season number for specials that lack an
     # episode_number (areena_extractors.py:83). On a seasoned show that
     # collapses ${season} → the special lands directly in the series
@@ -239,9 +236,7 @@ def _corrected_episode_path(
     return series_dir / SPECIALS_DIRNAME / abs_path.name
 
 
-def _relocate_orphan_episode(
-    ep: Episode, series_dir: Path, destdir: Path, seasoned: bool
-) -> None:
+def _relocate_orphan_episode(ep: Episode, series_dir: Path, destdir: Path, seasoned: bool) -> None:
     original = _resolve_path(ep.filename, destdir)
     corrected = _corrected_episode_path(ep, series_dir, destdir, seasoned)
     if original == corrected:

@@ -99,7 +99,7 @@ def download_clips(url: str, destdir: Path) -> int:
     returned as-is so the caller can warn instead of aborting.
     """
     w = _build_wiring(destdir)
-    code = w.downloader.download_clips(url, w.io, w.filters)
+    code: int = int(w.downloader.download_clips(url, w.io, w.filters))
     if code == RD_FAILED:
         raise DownloadFailed(f"yle-dl reported a failure downloading {url!r}")
     return code
@@ -107,10 +107,10 @@ def download_clips(url: str, destdir: Path) -> int:
 
 __all__ = [
     "OUTPUT_TEMPLATE",
-    "Episode",
-    "DownloadFailed",
-    "fetch_episode_metadata",
-    "download_clips",
-    "RD_SUCCESS",
     "RD_INCOMPLETE",
+    "RD_SUCCESS",
+    "DownloadFailed",
+    "Episode",
+    "download_clips",
+    "fetch_episode_metadata",
 ]

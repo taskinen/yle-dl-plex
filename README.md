@@ -1,5 +1,28 @@
 # yle-dl-plex
 
+[![CI][ci-badge]][ci-link]
+[![Coverage][coverage-badge]][coverage-link]
+[![Python 3.14+][python-badge]][python-link]
+[![License: MIT][license-badge]][license-link]
+[![Ruff][ruff-badge]][ruff-link]
+[![Checked with mypy][mypy-badge]][mypy-link]
+[![uv][uv-badge]][uv-link]
+
+[ci-badge]: https://github.com/taskinen/yle-dl-plex/actions/workflows/ci.yml/badge.svg
+[ci-link]: https://github.com/taskinen/yle-dl-plex/actions/workflows/ci.yml
+[coverage-badge]: https://raw.githubusercontent.com/taskinen/yle-dl-plex/python-coverage-comment-action-data/badge.svg
+[coverage-link]: https://github.com/taskinen/yle-dl-plex/tree/python-coverage-comment-action-data
+[python-badge]: https://img.shields.io/badge/python-3.14%2B-blue?logo=python&logoColor=white
+[python-link]: https://www.python.org/downloads/
+[license-badge]: https://img.shields.io/github/license/taskinen/yle-dl-plex
+[license-link]: LICENSE
+[ruff-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+[ruff-link]: https://github.com/astral-sh/ruff
+[mypy-badge]: https://www.mypy-lang.org/static/mypy_badge.svg
+[mypy-link]: https://mypy-lang.org/
+[uv-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json
+[uv-link]: https://github.com/astral-sh/uv
+
 Download a TV series from [Yle Areena](https://areena.yle.fi/) and turn it
 into a fully-furnished Plex library entry — with the proper series title,
 plot, poster, fan-art background, transparent show-logo wordmark,
@@ -194,6 +217,28 @@ agent setting — it's almost always the cause.
 All NFOs are valid XML, properly escaped, and writeable in a single
 atomic step (no half-written files if you cancel mid-run).
 
+## Development
+
+Install the dev tooling (pytest, ruff, mypy, coverage) into the same
+virtualenv:
+
+```bash
+uv sync --all-groups
+```
+
+Then run any of:
+
+```bash
+uv run pytest                          # unit tests
+uv run pytest --cov --cov-report=term-missing
+uv run ruff check .                    # lint
+uv run ruff format --check .           # format check (drop --check to apply)
+uv run mypy                            # strict type check
+```
+
+GitHub Actions runs all four on every PR and on pushes to `main`; see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
 ## Limitations and known quirks
 
 - **Geo-blocked content.** Yle restricts most content to Finland;
@@ -217,9 +262,8 @@ atomic step (no half-written files if you cancel mid-run).
 
 ## License
 
-Author retains copyright; treat this repo as personal-use software
-unless a separate `LICENSE` file says otherwise. `yle-dl` itself is
-GPL-3-or-later; you accept those terms by depending on it.
+MIT — see [`LICENSE`](LICENSE). `yle-dl` itself is GPL-3-or-later; you
+accept those terms by depending on it.
 
 ## Acknowledgements
 

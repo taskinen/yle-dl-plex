@@ -225,6 +225,18 @@ uv run yle-dl-plex --metadata-only --destdir /path/to/library \
   https://areena.yle.fi/1-62248394
 ```
 
+## Tests and CI
+
+Unit tests live in `tests/` (pytest, with respx for httpx mocking and
+`tmp_path` for filesystem-touching code). Run them with `uv run pytest`
+after `uv sync --all-groups`. GitHub Actions (`.github/workflows/ci.yml`)
+runs ruff, ruff format --check, mypy --strict, and pytest on every PR
+and on pushes to `main`. `cli.main()`'s orchestration and
+`yledl.download_clips()` are intentionally not unit-tested — they wrap
+upstream yle-dl internals and would require either heavy mocking or a
+live network/ffmpeg path. Their building blocks (path/season helpers,
+HTTP fetch, NFO writers, parsing) are covered individually.
+
 ## Maintenance
 
 Per the user's global instruction: **keep this file up to date with code

@@ -8,6 +8,7 @@ NFO on disk if the process crashes mid-write.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 import xml.etree.ElementTree as ET
@@ -50,10 +51,8 @@ def _write_tree_atomic(tree: ET.ElementTree, path: Path) -> None:
             tree.write(handle, encoding="utf-8", xml_declaration=True)
         os.replace(tmp_name, path)
     except BaseException:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(tmp_name)
-        except FileNotFoundError:
-            pass
         raise
 
 
