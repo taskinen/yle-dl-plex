@@ -58,7 +58,7 @@ class _Wiring:
     filters: StreamFilters
 
 
-def _build_wiring(destdir: Path) -> _Wiring:
+def _build_wiring(destdir: Path, preferred_format: str = "mkv") -> _Wiring:
     # `preferred_format` and `resume` are left at None/False by IOContext
     # but the yle-dl CLI always sets them (defaults: 'mkv', True). Without
     # `preferred_format`, `Downloader.file_extension()` crashes during a
@@ -67,7 +67,7 @@ def _build_wiring(destdir: Path) -> _Wiring:
     io = IOContext(
         destdir=str(destdir),
         create_dirs=True,
-        preferred_format="mkv",
+        preferred_format=preferred_format,
         resume=True,
     )
     httpclient = HttpClient(io)
@@ -78,12 +78,12 @@ def _build_wiring(destdir: Path) -> _Wiring:
     return _Wiring(downloader=downloader, io=io, filters=filters)
 
 
-def fetch_episode_metadata(url: str, destdir: Path) -> list[Episode]:
+def fetch_episode_metadata(url: str, destdir: Path, preferred_format: str = "mkv") -> list[Episode]:
     """Return one Episode per stream detected at `url`.
 
     Mirrors `yle-dl --showmetadata` but skips the JSON-on-stdout round trip.
     """
-    w = _build_wiring(destdir)
+    w = _build_wiring(destdir, preferred_format=preferred_format)
     raw = w.downloader.get_metadata(url, w.io, latest_only=False)
     return [Episode.from_metadata(item) for item in raw]
 
@@ -92,13 +92,13 @@ class DownloadFailed(RuntimeError):
     """yle-dl returned RD_FAILED."""
 
 
-def download_clips(url: str, destdir: Path) -> int:
+def download_clips(url: str, destdir: Path, preferred_format: str = "mkv") -> int:
     """Download every clip discovered at `url`. Returns the yle-dl exit code.
 
     Raises DownloadFailed when the result is RD_FAILED. RD_INCOMPLETE is
     returned as-is so the caller can warn instead of aborting.
     """
-    w = _build_wiring(destdir)
+    w = _build_wiring(destdir, preferred_format=preferred_format)
     code: int = int(w.downloader.download_clips(url, w.io, w.filters))
     if code == RD_FAILED:
         raise DownloadFailed(f"yle-dl reported a failure downloading {url!r}")

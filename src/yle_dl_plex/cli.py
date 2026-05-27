@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import logging
 import os
 import re
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
@@ -83,7 +85,8 @@ def _setup_logging(verbose: bool) -> None:
     # propagation — otherwise every yle-dl log line is emitted twice (once
     # raw, once with our prefix).
     yledl_logger = logging.getLogger("yledl")
-    yledl_logger.handlers = []
+    if hasattr(yledl_logger, "handlers"):
+        yledl_logger.handlers = []
     yledl_logger.propagate = True
 
     # httpx emits a one-line INFO record for every request — far too noisy
@@ -103,6 +106,7 @@ def _make_http_client() -> httpx.Client:
         headers={"User-Agent": USER_AGENT},
         follow_redirects=True,
         timeout=30.0,
+        transport=httpx.HTTPTransport(retries=3),
     )
 
 
@@ -110,23 +114,27 @@ def fetch_to_file(client: httpx.Client, url: str, dest: Path) -> bool:
     """Download `url` into `dest` atomically. Returns True on success."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        response = client.get(url)
-        response.raise_for_status()
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            fd, tmp_name = tempfile.mkstemp(prefix=".dl.", dir=str(dest.parent))
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    for chunk in response.iter_bytes():
+                        handle.write(chunk)
+
+                if os.path.getsize(tmp_name) == 0:
+                    log.warning("Empty body when downloading %s", url)
+                    os.unlink(tmp_name)
+                    return False
+
+                os.replace(tmp_name, dest)
+            except BaseException:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(tmp_name)
+                raise
     except httpx.HTTPError as exc:
         log.warning("Failed to download %s: %s", url, exc)
         return False
-    if not response.content:
-        log.warning("Empty body when downloading %s", url)
-        return False
-    fd, tmp_name = tempfile.mkstemp(prefix=".dl.", dir=str(dest.parent))
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(response.content)
-        os.replace(tmp_name, dest)
-    except BaseException:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(tmp_name)
-        raise
     return True
 
 
@@ -148,7 +156,7 @@ def _series_dir(episode_abs_path: Path, destdir: Path) -> Path:
     # so `.parent.parent` would overshoot to destdir itself.
     try:
         first_component = episode_abs_path.relative_to(destdir).parts[0]
-    except ValueError, IndexError:
+    except (ValueError, IndexError):
         return episode_abs_path.parent.parent
     return destdir / first_component
 
@@ -185,13 +193,29 @@ def _page_indicates_seasons(soup: BeautifulSoup | None) -> bool:
     # Look for season-structure markers in any JSON-LD blob on the page.
     # On an episode page that's the TVEpisode's partOfSeason/seasonNumber;
     # on a series page it's containsSeason/numberOfSeasons or a TVEpisode
-    # listing with partOfSeason. Substring check is enough — these tokens
-    # don't appear in season-less shows' JSON-LD.
+    # listing with partOfSeason.
     if soup is None:
         return False
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
         text = script.string or script.get_text() or ""
-        if any(token in text for token in _SEASON_INDICATORS_LD):
+        if not text:
+            continue
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+
+        # Simple recursive check for season indicators in the parsed JSON
+        def has_season_token(node: Any) -> bool:
+            if isinstance(node, dict):
+                if any(token in node for token in _SEASON_INDICATORS_LD):
+                    return True
+                return any(has_season_token(v) for v in node.values())
+            if isinstance(node, list):
+                return any(has_season_token(item) for item in node)
+            return False
+
+        if has_season_token(data):
             return True
     return False
 
@@ -361,6 +385,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Output root directory (default: current directory).",
     )
     parser.add_argument(
+        "--prefer-format",
+        default="mkv",
+        help="Preferred video format (default: mkv). Passed to yle-dl.",
+    )
+    parser.add_argument(
         "--metadata-only",
         action="store_true",
         help="Skip video download; only (re)generate NFO/artwork.",
@@ -383,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Stage 1: episode metadata
     log.info("Fetching episode metadata from yle-dl ...")
-    episodes = yledl.fetch_episode_metadata(args.url, destdir)
+    episodes = yledl.fetch_episode_metadata(args.url, destdir, preferred_format=args.prefer_format)
     if not episodes:
         log.error("No episodes found at %s", args.url)
         return 1
@@ -421,7 +450,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             log.info("Downloading episodes with yle-dl ...")
             try:
-                code = yledl.download_clips(args.url, destdir)
+                code = yledl.download_clips(args.url, destdir, preferred_format=args.prefer_format)
             except yledl.DownloadFailed as exc:
                 log.error("%s", exc)
                 return 1
