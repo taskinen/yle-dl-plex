@@ -156,7 +156,7 @@ def _series_dir(episode_abs_path: Path, destdir: Path) -> Path:
     # so `.parent.parent` would overshoot to destdir itself.
     try:
         first_component = episode_abs_path.relative_to(destdir).parts[0]
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return episode_abs_path.parent.parent
     return destdir / first_component
 

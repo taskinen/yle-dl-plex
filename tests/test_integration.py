@@ -1,22 +1,21 @@
 """Integration tests for the main CLI orchestration."""
 
-import logging
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import respx
 from httpx import Response
 
 from yle_dl_plex.cli import main
-from yle_dl_plex.yledl import Episode, RD_SUCCESS
+from yle_dl_plex.yledl import RD_SUCCESS, Episode
 
 
 @pytest.fixture
 def mock_yledl():
-    with patch("yle_dl_plex.yledl.fetch_episode_metadata") as mock_fetch, \
-         patch("yle_dl_plex.yledl.download_clips") as mock_download:
-
+    with (
+        patch("yle_dl_plex.yledl.fetch_episode_metadata") as mock_fetch,
+        patch("yle_dl_plex.yledl.download_clips") as mock_download,
+    ):
         mock_fetch.return_value = [
             Episode(
                 filename="Show/Season 01/Show - S01E01 - Title.mkv",
@@ -26,7 +25,7 @@ def mock_yledl():
                 duration_seconds=1800,
                 publish_timestamp="2024-01-01T12:00:00Z",
                 webpage="https://areena.yle.fi/1-123",
-                program_id="1-123"
+                program_id="1-123",
             )
         ]
         mock_download.return_value = RD_SUCCESS
@@ -39,7 +38,10 @@ def test_main_orchestration(tmp_path, mock_yledl):
     destdir = tmp_path / "output"
 
     # Mock Areena page
-    respx.get("https://areena.yle.fi/1-123").mock(return_value=Response(200, text="""
+    respx.get("https://areena.yle.fi/1-123").mock(
+        return_value=Response(
+            200,
+            text="""
         <html>
             <head>
                 <script type="application/ld+json">
@@ -53,12 +55,16 @@ def test_main_orchestration(tmp_path, mock_yledl):
             </head>
             <body></body>
         </html>
-    """))
+    """,
+        )
+    )
 
     # Mock images
     respx.get("https://example.com/thumb.jpg").mock(return_value=Response(200, content=b"thumb"))
     respx.get("https://example.com/poster.jpg").mock(return_value=Response(200, content=b"poster"))
-    respx.get("https://example.com/background.jpg").mock(return_value=Response(200, content=b"background"))
+    respx.get("https://example.com/background.jpg").mock(
+        return_value=Response(200, content=b"background")
+    )
 
     # We need to create a dummy video file because Stage 4 checks for it
     video_path = destdir / "Show/Season 01/Show - S01E01 - Title.mkv"
@@ -78,6 +84,7 @@ def test_main_orchestration(tmp_path, mock_yledl):
     assert (destdir / "Show/background.jpg").exists()
     assert (destdir / "Show/Season 01/Show - S01E01 - Title.nfo").exists()
     assert (destdir / "Show/Season 01/Show - S01E01 - Title.jpg").exists()
+
 
 @respx.mock
 def test_main_metadata_only(tmp_path, mock_yledl):
